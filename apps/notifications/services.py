@@ -31,3 +31,26 @@ def push_user_notification(user_id: int, message: str, schema_name: str | None =
             'created_at': timezone.now().isoformat(),
         },
     )
+
+
+def push_bulk_user_notification(user_ids: list[int], message: str, schema_name: str | None = None) -> None:
+    if not user_ids:
+        return
+
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+
+    active_schema = schema_name or getattr(connection, 'schema_name', 'public')
+    created_at = timezone.now().isoformat()
+    sender = async_to_sync(channel_layer.group_send)
+
+    for user_id in user_ids:
+        sender(
+            build_user_notification_group(active_schema, user_id),
+            {
+                'type': 'notify',
+                'message': message,
+                'created_at': created_at,
+            },
+        )

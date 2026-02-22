@@ -16,8 +16,8 @@ If you want the fastest review path, open the HLD PDF first, then validate the r
 |---|---|---|---|
 | 1. Multi-Tenant Architecture | `django-tenants` domain-based tenant resolution with schema-per-tenant isolation | `config/settings.py`, `apps/customers/models.py`, `config/public_urls.py` | Requirement 1 page |
 | 2. Django Admin Panel | Public admin manages tenant lifecycle, tenant admin manages tenant-local users/data | `apps/customers/admin.py`, `apps/users/admin.py`, `apps/catalog/admin.py`, `apps/notifications/admin.py` | Requirement 2 page |
-| 3. Public & Private Schema + Redis | Public schema for shared metadata; private schemas for tenant entities; tenant-scoped cache keys + invalidation | `config/settings.py`, `apps/catalog/views.py`, `apps/catalog/signals.py` | Requirement 3 page |
-| 4. Elasticsearch Implementation | Official Elasticsearch client with tenant-isolated index naming and signal-driven sync | `apps/catalog/search.py`, `apps/catalog/signals.py` | Requirement 4 page |
+| 3. Public & Private Schema + Redis | Public schema for shared metadata; private schemas for tenant entities; tenant-scoped cache keys + versioned invalidation | `config/settings.py`, `apps/catalog/views.py`, `apps/catalog/cache.py`, `apps/catalog/services.py` | Requirement 3 page |
+| 4. Elasticsearch Implementation | Official Elasticsearch client with tenant-isolated index naming and signal-to-service sync | `apps/catalog/search.py`, `apps/catalog/services.py`, `apps/catalog/signals.py` | Requirement 4 page |
 | 5. WebSockets for Notifications | Django Channels consumer + Redis channel layer + React client with schema-scoped notification groups | `config/asgi.py`, `apps/notifications/consumers.py`, `apps/notifications/services.py`, `frontend/src/App.jsx` | Requirement 5 page |
 
 ## Architecture Highlights
@@ -25,10 +25,11 @@ If you want the fastest review path, open the HLD PDF first, then validate the r
 - Hard tenant isolation at DB schema level (`public` + private tenant schemas).
 - Tenant boundary is propagated consistently to ORM access (`connection.schema_name`).
 - Tenant boundary is propagated consistently to Redis keys (`<schema>:...`).
+- Search cache uses schema-scoped versioning to avoid stale query results after writes.
 - Tenant boundary is propagated consistently to Elasticsearch indexes (`<prefix>_<schema>_products`).
 - Tenant boundary is propagated consistently to WebSocket groups (`<schema>.user_notifications.<id>`).
 - Admin separation: public domain admin for tenants/domains, tenant domain admin for tenant business data.
-- Signal-based synchronization keeps Elasticsearch and cache coherent for API and admin writes.
+- Signal-to-service event pipeline keeps cache, search index, and notifications coherent for API and admin writes.
 
 ## Project Structure
 
@@ -39,7 +40,6 @@ If you want the fastest review path, open the HLD PDF first, then validate the r
 - `apps/catalog/`: product CRUD API, search endpoint, caching hooks, search sync.
 - `apps/notifications/`: notification model, websocket consumer, push service, tenancy helpers.
 - `frontend/`: minimal React app for live WebSocket notifications.
-- `docs/`: HLD PDF and PDF generator script.
 
 ## Local Setup
 
@@ -96,7 +96,7 @@ WebSocket:
 
 API authentication defaults:
 - `SessionAuthentication`
-- `BasicAuthentication`
+- optional `BasicAuthentication` via `ENABLE_BASIC_AUTH=1`
 
 ## Quality, Security, and Reliability
 
@@ -125,7 +125,13 @@ Current test coverage includes:
 
 - This repo includes source code and configuration for all required components.
 - The HLD deliverable is included as `docs/HLD_MultiTenant_Django_SaaS.pdf`.
-- The HLD can be regenerated anytime using `python docs/generate_hld_pdf.py`.
+
+## Evaluation Criteria Mapping
+
+- Adherence to requirements: `config/settings.py`, `apps/customers/models.py`, `apps/catalog/search.py`, `apps/notifications/consumers.py`
+- Code quality and organization: `apps/catalog/cache.py`, `apps/catalog/services.py`, `apps/catalog/signals.py`
+- Scalability and performance: `apps/catalog/views.py`, `apps/catalog/search.py`, `apps/notifications/services.py`
+- Documentation and clarity: `README.md`, `LLD_CODE_FLOW.md`, `docs/HLD_MultiTenant_Django_SaaS.pdf`, `docs/REVIEWER_DEMO.md`
 
 ## Production Hardening Checklist
 

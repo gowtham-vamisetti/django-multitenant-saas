@@ -184,7 +184,3 @@ Documentation:
 ```bash
 pytest
 ```
-
-```bash
-python docs/generate_hld_pdf.py
-```

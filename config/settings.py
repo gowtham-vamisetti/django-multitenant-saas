@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 load_dotenv()
 
@@ -10,6 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'unsafe-dev-key')
 DEBUG = os.getenv('DEBUG', '1') == '1'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+
+if not DEBUG and SECRET_KEY == 'unsafe-dev-key':
+    raise ImproperlyConfigured('Set DJANGO_SECRET_KEY when DEBUG=0')
 
 SHARED_APPS = [
     'django_tenants',
@@ -102,11 +106,13 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
+ENABLE_BASIC_AUTH = os.getenv('ENABLE_BASIC_AUTH', '0') == '1'
+auth_classes = ['rest_framework.authentication.SessionAuthentication']
+if ENABLE_BASIC_AUTH:
+    auth_classes.append('rest_framework.authentication.BasicAuthentication')
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': tuple(auth_classes),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
@@ -139,6 +145,7 @@ CHANNEL_LAYERS = {
 
 ELASTICSEARCH_URL = os.getenv('ELASTICSEARCH_URL', 'http://127.0.0.1:9200')
 ELASTICSEARCH_INDEX_PREFIX = os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'saas')
+ELASTICSEARCH_WRITE_REFRESH = os.getenv('ELASTICSEARCH_WRITE_REFRESH', '').strip() or None
 
 LOGGING = {
     'version': 1,

@@ -7,7 +7,7 @@ from django.test import SimpleTestCase
 
 from .consumers import NotificationConsumer
 from .middleware import TenantSchemaScopeMiddleware
-from .services import build_user_notification_group, normalize_schema_name, push_user_notification
+from .services import build_user_notification_group, normalize_schema_name, push_bulk_user_notification, push_user_notification
 from .tenancy import host_from_scope, parse_host, schema_name_from_host
 
 
@@ -40,6 +40,20 @@ class NotificationPushTests(SimpleTestCase):
     @patch('apps.notifications.services.get_channel_layer', return_value=None)
     def test_push_user_notification_handles_missing_layer(self, _layer_mock):
         push_user_notification(user_id=7, message='hello', schema_name='acme')
+
+    @patch('apps.notifications.services.get_channel_layer')
+    @patch('apps.notifications.services.async_to_sync')
+    def test_push_bulk_user_notification_uses_schema_groups(self, async_to_sync_mock, get_channel_layer_mock):
+        channel_layer = MagicMock()
+        get_channel_layer_mock.return_value = channel_layer
+        sender = async_to_sync_mock.return_value
+
+        push_bulk_user_notification(user_ids=[7, 8], message='hello', schema_name='acme')
+
+        self.assertEqual(sender.call_count, 2)
+        first_call, second_call = sender.call_args_list
+        self.assertEqual(first_call.args[0], 'acme.user_notifications.7')
+        self.assertEqual(second_call.args[0], 'acme.user_notifications.8')
 
 
 class NotificationTenancyParsingTests(SimpleTestCase):

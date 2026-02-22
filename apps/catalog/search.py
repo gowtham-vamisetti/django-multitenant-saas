@@ -13,6 +13,7 @@ class ProductSearchService:
     def __init__(self) -> None:
         self.client = Elasticsearch(settings.ELASTICSEARCH_URL)
         self.index_name = f"{settings.ELASTICSEARCH_INDEX_PREFIX}_{connection.schema_name}_products"
+        self.write_refresh = getattr(settings, 'ELASTICSEARCH_WRITE_REFRESH', None)
 
     def ensure_index(self) -> None:
         if self.client.indices.exists(index=self.index_name):
@@ -30,20 +31,28 @@ class ProductSearchService:
 
     def index_product(self, product: Product) -> None:
         self.ensure_index()
-        self.client.index(
-            index=self.index_name,
-            id=product.id,
-            document={
+        payload = {
+            'index': self.index_name,
+            'id': product.id,
+            'document': {
                 'name': product.name,
                 'description': product.description,
                 'price': float(product.price),
             },
-            refresh=True,
+        }
+        if self.write_refresh:
+            payload['refresh'] = self.write_refresh
+
+        self.client.index(
+            **payload,
         )
 
     def delete_product(self, product_id: int) -> None:
         try:
-            self.client.delete(index=self.index_name, id=product_id, refresh=True)
+            payload = {'index': self.index_name, 'id': product_id}
+            if self.write_refresh:
+                payload['refresh'] = self.write_refresh
+            self.client.delete(**payload)
         except Exception:
             logger.exception('Failed to delete product %s from Elasticsearch index %s', product_id, self.index_name)
 
