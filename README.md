@@ -1,84 +1,77 @@
 # django-multitenant-saas
 
-Multi-tenant SaaS reference implementation using Django, PostgreSQL schemas, Redis cache, Elasticsearch search, and Django Channels WebSockets.
+Multi-tenant SaaS reference implementation using Django, PostgreSQL schemas, Redis, Elasticsearch, and Django Channels.
 
-## Implemented Requirements
+## Reviewer Quick Guide
 
-1. Multi-tenant architecture
-- Uses `django-tenants` with PostgreSQL schema isolation.
-- `public` schema stores shared tenant metadata.
-- Each tenant gets a private schema containing tenant-specific apps and data.
+- HLD PDF: `docs/HLD_MultiTenant_Django_SaaS.pdf`
+- HLD generator (source): `docs/generate_hld_pdf.py`
+- Backend entrypoints: `config/settings.py`, `config/asgi.py`, `config/urls.py`, `config/public_urls.py`
+- Primary apps: `apps/customers`, `apps/users`, `apps/catalog`, `apps/notifications`
 
-2. Django admin panel
-- Tenant models (`Client`, `Domain`) are managed in admin.
-- Tenant users, products, and notifications are admin-managed per schema.
+If you want the fastest review path, open the HLD PDF first, then validate the requirement mapping table below.
 
-3. Public and private schemas
-- Shared apps in `SHARED_APPS` (`apps.customers`, auth/admin base).
-- Tenant apps in `TENANT_APPS` (`apps.users`, `apps.catalog`, `apps.notifications`).
-- Redis caching used in product CRUD read paths (`list`, `retrieve`) with tenant-scoped cache keys.
+## Requirement Coverage Matrix
 
-4. Elasticsearch integration
-- Uses official Python client (`elasticsearch`).
-- Product data indexed into tenant-specific index names:
-  - `{ELASTICSEARCH_INDEX_PREFIX}_{schema_name}_products`
-- Search endpoint returns tenant-scoped results.
+| Assignment Requirement | Implemented Design | Code References | HLD Page |
+|---|---|---|---|
+| 1. Multi-Tenant Architecture | `django-tenants` domain-based tenant resolution with schema-per-tenant isolation | `config/settings.py`, `apps/customers/models.py`, `config/public_urls.py` | Requirement 1 page |
+| 2. Django Admin Panel | Public admin manages tenant lifecycle, tenant admin manages tenant-local users/data | `apps/customers/admin.py`, `apps/users/admin.py`, `apps/catalog/admin.py`, `apps/notifications/admin.py` | Requirement 2 page |
+| 3. Public & Private Schema + Redis | Public schema for shared metadata; private schemas for tenant entities; tenant-scoped cache keys + invalidation | `config/settings.py`, `apps/catalog/views.py`, `apps/catalog/signals.py` | Requirement 3 page |
+| 4. Elasticsearch Implementation | Official Elasticsearch client with tenant-isolated index naming and signal-driven sync | `apps/catalog/search.py`, `apps/catalog/signals.py` | Requirement 4 page |
+| 5. WebSockets for Notifications | Django Channels consumer + Redis channel layer + React client with schema-scoped notification groups | `config/asgi.py`, `apps/notifications/consumers.py`, `apps/notifications/services.py`, `frontend/src/App.jsx` | Requirement 5 page |
 
-5. WebSockets for notifications
-- Django Channels + Redis channel layer.
-- Authenticated users connect to `/ws/notifications/`.
-- Product creation emits notification events to tenant staff users.
-- React app (`frontend/`) subscribes and renders live notifications.
+## Architecture Highlights
+
+- Hard tenant isolation at DB schema level (`public` + private tenant schemas).
+- Tenant boundary is propagated consistently to ORM access (`connection.schema_name`).
+- Tenant boundary is propagated consistently to Redis keys (`<schema>:...`).
+- Tenant boundary is propagated consistently to Elasticsearch indexes (`<prefix>_<schema>_products`).
+- Tenant boundary is propagated consistently to WebSocket groups (`<schema>.user_notifications.<id>`).
+- Admin separation: public domain admin for tenants/domains, tenant domain admin for tenant business data.
+- Signal-based synchronization keeps Elasticsearch and cache coherent for API and admin writes.
 
 ## Project Structure
 
-- `config/settings.py`: django-tenants, Redis, Channels, Elasticsearch, logging.
-- `apps/customers/`: tenant and domain models (public schema).
-- `apps/users/`: tenant user model.
-- `apps/catalog/`: product CRUD API, Redis cache, Elasticsearch indexing/search.
-- `apps/notifications/`: notification model, websocket consumer, push service.
-- `frontend/`: minimal React WebSocket client.
+- `config/settings.py`: multi-tenancy, Redis cache, DRF auth, Channels, Elasticsearch, logging.
+- `config/asgi.py`: HTTP + WebSocket protocol routing and tenant-aware websocket middleware.
+- `apps/customers/`: tenant and domain models (`Client`, `Domain`) in public schema.
+- `apps/users/`: tenant user model/admin.
+- `apps/catalog/`: product CRUD API, search endpoint, caching hooks, search sync.
+- `apps/notifications/`: notification model, websocket consumer, push service, tenancy helpers.
+- `frontend/`: minimal React app for live WebSocket notifications.
+- `docs/`: HLD PDF and PDF generator script.
 
 ## Local Setup
 
-### 1. Environment
-
-Copy `.env.example` to `.env` and adjust values.
-
-### 2. Start infrastructure
+1. Copy `.env.example` to `.env`.
+2. Start infra:
 
 ```bash
 docker compose up -d postgres redis elasticsearch
 ```
 
-### 3. Install dependencies
+3. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Database and tenants
+4. Run migrations and create superuser:
 
 ```bash
 python manage.py migrate_schemas --shared
+python manage.py migrate_schemas
 python manage.py createsuperuser
 ```
 
-Create a tenant in Django admin (`/admin`) under `Clients` and add its `Domain`.
-
-Then run tenant migrations:
-
-```bash
-python manage.py migrate_schemas
-```
-
-### 5. Run backend
+5. Run backend:
 
 ```bash
 python manage.py runserver
 ```
 
-### 6. Run React client
+6. Run frontend:
 
 ```bash
 cd frontend
@@ -86,9 +79,9 @@ npm install
 npm run dev
 ```
 
-## API Endpoints
+## Endpoints
 
-Tenant domain routes:
+Tenant routes:
 - `GET /api/catalog/products/`
 - `POST /api/catalog/products/`
 - `GET /api/catalog/products/{id}/`
@@ -96,27 +89,25 @@ Tenant domain routes:
 - `DELETE /api/catalog/products/{id}/`
 - `GET /api/catalog/products/search/?q=...`
 
-Public domain routes:
+Public route:
 - `GET /health/`
 
 WebSocket:
 - `ws://<tenant-domain>/ws/notifications/`
 
-## Security and Reliability Notes
+API authentication defaults:
+- `SessionAuthentication`
+- `BasicAuthentication`
 
-- Tenant isolation is enforced at DB schema level via `django-tenants`.
-- Notifications WebSocket requires authenticated users.
-- Logging is configured with centralized console handler.
-- Search/index operations are wrapped with exception handling to avoid request crashes.
-- Cache keys are tenant-scoped (`{schema_name}:...`) to prevent leakage.
+## Quality, Security, and Reliability
+
+- Authentication enforced for API and WebSocket notification access.
+- Tenant-safe channel grouping for notifications.
+- Tenant-scoped cache keys and invalidation strategy.
+- Graceful error handling and logging for search/indexing paths.
+- Baseline security settings and secure-cookie toggles in environment config.
 
 ## Tests
-
-Included tests:
-- Product API response test.
-- Search endpoint integration with mocked search service.
-- Notification creation on product create.
-- Tenant model string representation.
 
 Run tests:
 
@@ -124,14 +115,22 @@ Run tests:
 pytest
 ```
 
-## Design Decisions
+Current test coverage includes:
+- Product API response/auth tests.
+- Search endpoint behavior with mocked search service.
+- Notification creation on product create.
+- Notification service group isolation and tenancy parsing tests.
+- Tenant model representation test.
 
-- `django-tenants` selected over manual routing for robust schema lifecycle management.
-- Redis chosen for low-latency cache and channel layer backend.
-- Elasticsearch index per tenant keeps search boundaries explicit.
-- WebSocket push grouped per user (`user_notifications_<id>`) for targeted events.
+## Submission Notes
 
-## Notes
+- This repo includes source code and configuration for all required components.
+- The HLD deliverable is included as `docs/HLD_MultiTenant_Django_SaaS.pdf`.
+- The HLD can be regenerated anytime using `python docs/generate_hld_pdf.py`.
 
-- Python runtime was not available in this environment, so runtime checks (`pytest`, migrations) were not executed here.
-- Before production use, add HTTPS, strict host/cookie settings, connection pooling, and CI pipeline checks.
+## Production Hardening Checklist
+
+- Enable HTTPS and strict cookie settings.
+- Restrict `ALLOWED_HOSTS` and disable `DEBUG`.
+- Add monitoring, alerting, and centralized log aggregation.
+- Add CI pipeline for tests, linting, and security checks.

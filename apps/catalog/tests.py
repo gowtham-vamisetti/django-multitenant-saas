@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from .models import Product
 from .views import ProductViewSet
@@ -11,24 +11,33 @@ from .views import ProductViewSet
 class ProductCachingTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+        self.user = get_user_model().objects.create_user(username='reader', password='pass1234')
         Product.objects.create(name='Widget', description='A widget', price='10.00', is_active=True)
 
     def test_list_endpoint_returns_data(self):
         request = self.factory.get('/api/catalog/products/')
+        force_authenticate(request, user=self.user)
         response = ProductViewSet.as_view({'get': 'list'})(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
+
+    def test_list_endpoint_requires_authentication(self):
+        request = self.factory.get('/api/catalog/products/')
+        response = ProductViewSet.as_view({'get': 'list'})(request)
+        self.assertIn(response.status_code, (401, 403))
 
 
 class ProductSearchTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
         Product.objects.create(name='Phone', description='Smart phone', price='100.00', is_active=True)
+        self.user = get_user_model().objects.create_user(username='searcher', password='pass1234')
 
     @patch('apps.catalog.views.ProductSearchService')
     def test_search_endpoint_uses_search_service(self, search_service_cls):
         search_service_cls.return_value.search.return_value = [1]
         request = self.factory.get('/api/catalog/products/search/?q=phone')
+        force_authenticate(request, user=self.user)
         response = ProductViewSet.as_view({'get': 'search'})(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)

@@ -1,10 +1,12 @@
 import logging
+import hashlib
 
 from django.core.cache import cache
 from django.db import connection
 from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -18,6 +20,7 @@ logger = logging.getLogger(__name__)
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
+    permission_classes = (IsAuthenticated,)
 
     def _cache_key(self, suffix: str) -> str:
         return f"{connection.schema_name}:catalog:{suffix}"
@@ -48,37 +51,31 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer: ProductSerializer) -> None:
         product = serializer.save()
         self._invalidate_cache(product.id)
-        self._index_product(product)
 
     def perform_update(self, serializer: ProductSerializer) -> None:
         product = serializer.save()
         self._invalidate_cache(product.id)
-        self._index_product(product)
 
     def perform_destroy(self, instance: Product) -> None:
         product_id = instance.id
         instance.delete()
         self._invalidate_cache(product_id)
-        try:
-            ProductSearchService().delete_product(product_id)
-        except Exception:
-            logger.exception('Elasticsearch delete failed for product %s', product_id)
 
     def _invalidate_cache(self, product_id: int) -> None:
         cache.delete(self._cache_key('products:list'))
         cache.delete(self._cache_key(f'products:{product_id}'))
-
-    def _index_product(self, product: Product) -> None:
-        try:
-            ProductSearchService().index_product(product)
-        except Exception:
-            logger.exception('Elasticsearch index failed for product %s', product.id)
 
     @action(detail=False, methods=['get'])
     def search(self, request: Request) -> Response:
         query = request.query_params.get('q', '').strip()
         if not query:
             return Response({'detail': 'Missing query parameter q'}, status=status.HTTP_400_BAD_REQUEST)
+
+        digest = hashlib.sha1(query.lower().encode('utf-8')).hexdigest()
+        cache_key = self._cache_key(f'products:search:{digest}')
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
 
         try:
             product_ids = ProductSearchService().search(query)
@@ -88,4 +85,6 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         queryset = Product.objects.filter(id__in=product_ids)
         ordered = sorted(queryset, key=lambda product: product_ids.index(product.id))
-        return Response(ProductSerializer(ordered, many=True).data)
+        data = ProductSerializer(ordered, many=True).data
+        cache.set(cache_key, data, timeout=60)
+        return Response(data)

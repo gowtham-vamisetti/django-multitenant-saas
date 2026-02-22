@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 
-const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/notifications/'
+const WS_SCHEME = window.location.protocol === 'https:' ? 'wss' : 'ws'
+const WS_BASE =
+  import.meta.env.VITE_WS_URL || `${WS_SCHEME}://${window.location.hostname}:8000/ws/notifications/`
 
 export default function App() {
   const [status, setStatus] = useState('connecting')
@@ -28,6 +30,7 @@ export default function App() {
         <p className="badge">Tenant Feed</p>
         <h1>Live Notifications</h1>
         <p className="status">Socket status: {status}</p>
+        <p className="status">Authentication required on tenant domain session.</p>
       </header>
       <ul>
         {messages.map((item, idx) => (
