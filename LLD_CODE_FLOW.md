@@ -42,8 +42,6 @@ Test evidence:
 - Baseline tenant model check: `apps/customers/tests.py:6`
 - Tenant host parsing helper tests: `apps/notifications/tests.py:40`
 
-Reviewer note:
-- Stronger proof for Q1 is an end-to-end cross-tenant isolation integration test (tenant A cannot read tenant B rows). Current test suite validates supporting pieces but not full cross-tenant integration yet.
 
 ## Q2. Django Admin Panel
 
