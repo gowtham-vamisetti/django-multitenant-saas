@@ -5,7 +5,6 @@ Multi-tenant SaaS reference implementation using Django, PostgreSQL schemas, Red
 ## Reviewer Quick Guide
 
 - HLD PDF: `docs/HLD_MultiTenant_Django_SaaS.pdf`
-- HLD generator (source): `docs/generate_hld_pdf.py`
 - Backend entrypoints: `config/settings.py`, `config/asgi.py`, `config/urls.py`, `config/public_urls.py`
 - Primary apps: `apps/customers`, `apps/users`, `apps/catalog`, `apps/notifications`
 
