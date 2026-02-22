@@ -1,0 +1,11 @@
+Django==5.1.6
+psycopg2-binary==2.9.10
+django-tenants==3.7.0
+django-redis==5.4.0
+channels==4.1.0
+channels-redis==4.2.1
+elasticsearch==8.17.1
+python-dotenv==1.0.1
+djangorestframework==3.15.2
+pytest==8.3.4
+pytest-django==4.9.0
