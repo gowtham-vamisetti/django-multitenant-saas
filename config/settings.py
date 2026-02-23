@@ -18,6 +18,7 @@ if not DEBUG and SECRET_KEY == 'unsafe-dev-key':
 SHARED_APPS = [
     'django_tenants',
     'apps.customers',
+    'apps.users',
     'channels',
     'django.contrib.admin',
     'django.contrib.auth',
